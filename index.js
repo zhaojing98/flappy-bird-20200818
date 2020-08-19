@@ -11,6 +11,9 @@ var bird = {
     maxTop: 570,
     pipeLength: 7,
     pipeArr: [],
+    pipeLastIndex: 6,
+    score: 0,
+    scoreArr: [],
     // birdX: 0,
     init: function () {
         this.initData();
@@ -18,12 +21,27 @@ var bird = {
 
         this.handleStart();
         this.handleClick();
+        this.handleReStart();
+        if (sessionStorage.getItem('play')) {
+            this.start();
+        }
     },
     initData: function () {
         this.el = document.getElementById('game');
         this.oBird = this.el.getElementsByClassName('bird')[0];
         this.oStart = this.el.getElementsByClassName('start')[0];
         this.oScore = this.el.getElementsByClassName('score')[0];
+        this.oMask = this.el.getElementsByClassName('mask')[0];
+        this.oEnd = this.el.getElementsByClassName('end')[0];
+        this.oFinalScore = this.el.getElementsByClassName('final-score')[0];
+        this.oRankList = this.el.getElementsByClassName('rank-list')[0];
+        this.oRestart = this.el.getElementsByClassName('restrat')[0];
+        // console.log(this.oRankList)
+        this.scoreArr = this.getScore();
+    },
+    getScore: function () {
+        var scoreArr = getLocal('score');
+        return scoreArr ? scoreArr : [];
     },
     animate: function () {
         var count = 0;
@@ -67,7 +85,16 @@ var bird = {
         this.birdTop += ++this.birdStepY;
         this.oBird.style.top = this.birdTop + 'px';
         this.judgeKnock();//碰撞检测
+        this.addScore();
 
+    },
+    addScore: function () {
+        var index = this.score % this.pipeLength;
+        var pipeX = this.pipeArr[index].up.offsetLeft;
+
+        if (pipeX < 13) {
+            this.oScore.innerText = ++this.score;
+        }
     },
     judgeKnock: function () {//碰撞检测
         this.judgeBoundary();
@@ -80,6 +107,13 @@ var bird = {
         }
     },
     judgePipe: function () {//检测是否碰到柱子
+        var index = this.score % this.pipeLength;
+        var pipeX = this.pipeArr[index].up.offsetLeft;
+        var pipeY = this.pipeArr[index].y;
+        var birdY = this.birdTop;
+        if (pipeX <= 95 && pipeX >= 13 && (birdY <= pipeY[0] || birdY >= pipeY[1])) {
+            this.failGame();
+        }
 
     },
     creatPipe: function (x) {
@@ -116,6 +150,7 @@ var bird = {
         this.pipeArr.push({
             up: oUpPipe,
             down: oDownPipe,
+            y: [upHeight, upHeight + 150 - 30],
         })
     },
     pipeMove: function () {
@@ -123,6 +158,13 @@ var bird = {
             var oUpPipe = this.pipeArr[i].up;
             var oDownPipe = this.pipeArr[i].down;
             var x = oUpPipe.offsetLeft - this.skyStep;
+            if (x < -52) {
+                var lastPipeLeft = this.pipeArr[this.pipeLastIndex].up.offsetLeft;
+                oUpPipe.style.left = lastPipeLeft + 300 + 'px';
+                oDownPipe.style.left = lastPipeLeft + 300 + 'px';
+                this.pipeLastIndex = i;
+                continue;
+            }
 
             oUpPipe.style.left = x + 'px';
             oDownPipe.style.left = x + 'px';
@@ -139,17 +181,18 @@ var bird = {
     handleStart: function () {
         var self = this;
 
-        this.oStart.onclick = function () {
-            // this==this.oStart
-            self.startFlag = true;
-            self.oStart.style.display = 'none';
-            self.oScore.style.display = 'block';
-            self.oBird.style.left = '80px';
-            self.skyStep = 5;
-            self.oBird.style.transition = 'none';
-            for (var i = 0; i < self.pipeLength; i++) {
-                self.creatPipe(300 * (i + 1));
-            }
+        this.oStart.onclick = this.start.bind(this);
+    },
+    start: function () {
+        var self = this;
+        self.startFlag = true;
+        self.oStart.style.display = 'none';
+        self.oScore.style.display = 'block';
+        self.oBird.style.left = '80px';
+        self.skyStep = 5;
+        self.oBird.style.transition = 'none';
+        for (var i = 0; i < self.pipeLength; i++) {
+            self.creatPipe(300 * (i + 1));
         }
     },
     handleClick: function () {
@@ -161,15 +204,83 @@ var bird = {
             var isStart = dom.classList.contains('start');
             if (!isStart) {
                 self.birdStepY = -10;
+
             }
 
             //此时过度影响了小鸟上什的速度
         }
     },
+    handleReStart: function () {
+        this.oRestart.onclick = function () {
+            sessionStorage.setItem('play', true);
+            window.location.reload();
+        }
+    },
     failGame: function () {
-        console.log('end');
+        // console.log('end');
         clearInterval(this.timer);
+        this.setScore();
+        this.oMask.style.display = 'block';
+        this.oEnd.style.display = 'block';
+        this.oScore.style.display = 'none';
+        this.oBird.style.display = 'none';
+        this.oFinalScore.innerText = this.score;
+        this.randerRankList();
 
+
+    },
+    setScore: function () {
+        this.scoreArr.push({
+            score: this.score,
+            time: this.getDate()
+        });
+        this.scoreArr.sort(function (a, b) {
+            return b.score - a.score;
+        });
+
+        var scoreLength = this.scoreArr.length;
+
+        this.scoreArr.length = scoreLength > 8 ? 8 : scoreLength;
+
+        setLocal('score', this.scoreArr);
+    },
+    getDate: function () {
+        var d = new Date();
+        var year = d.getFullYear();
+        var mouth = d.getMonth() + 1;
+        var day = d.getDate();
+        var hour = d.getHours();
+        var minute = d.getMinutes();
+        var seconds = d.getSeconds();
+        return `${year}.${mouth}.${day} ${hour}:${minute}:${seconds}`
+    },
+    randerRankList: function () {
+        var template = '';
+
+        for (var i = 0; i < this.scoreArr.length; i++) {
+            var degreeClass = '';
+            var scoreObj = this.scoreArr[i];
+            switch (i) {
+                case 0:
+                    degreeClass = 'first';
+                    break;
+                case 1:
+                    degreeClass = 'second';
+                    break;
+                case 2:
+                    degreeClass = 'third';
+                    break;
+
+            }
+            template += `
+            <li class="rank-item">
+                <span class="rank-degree ${degreeClass}">${i + 1}</span>
+                <span class="rank-score">${scoreObj.score}</span>
+                <span class="rank-time">${scoreObj.time}</span>
+            </li>
+            `;
+        }
+        this.oRankList.innerHTML = template;
     },
 
 };
